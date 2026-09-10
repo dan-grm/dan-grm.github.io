@@ -1,0 +1,78 @@
+{{/*
+  Local override: avoid Scratch SetInMap key-path issues with URL-containing keys.
+  Build normalized page links without deduplication.
+*/}}
+
+{{ $page := .page }}
+{{ $types := hugo.Data.link_types.types }}
+{{ $derived := hugo.Data.link_types.derived }}
+{{ $links := slice }}
+
+{{ with $page.Params.links }}
+  {{ range . }}
+    {{ $type := .type | default "custom" }}
+    {{ $url := .url | default "" }}
+    {{ if and (not $url) .id }}
+      {{ if eq $type "doi" }}
+        {{ $url = replace (index (index $derived "doi") "url_template") "{id}" (printf "%v" .id) }}
+      {{ else if and (eq $type "preprint") (eq .provider "arxiv") }}
+        {{ $url = replace (index (index $derived "arxiv") "url_template") "{id}" (printf "%v" .id) }}
+      {{ else if and (eq $type "preprint") (eq .provider "openreview") }}
+        {{ $url = replace (index (index $derived "openreview") "url_template") "{id}" (printf "%v" .id) }}
+      {{ end }}
+    {{ end }}
+    {{ $links = $links | append (dict
+      "type" $type
+      "url" $url
+      "icon" (.icon | default (index (index $types $type) "icon") | default "hero/link")
+      "labelKey" (index (index $types $type) "label_i18n")
+      "label" (.label | default .name)
+      "contexts" (.contexts | default (slice "list" "page"))
+      "rel" .rel
+    ) }}
+  {{ end }}
+{{ end }}
+
+{{ with $page.Params.projects }}
+  {{ range . }}
+    {{ with (site.GetPage (printf "projects/%s" .)) }}
+      {{ $links = $links | append (dict
+        "type" "project"
+        "url" .RelPermalink
+        "icon" (index (index $types "project") "icon")
+        "labelKey" (index (index $types "project") "label_i18n")
+        "contexts" (slice "list" "page")
+      ) }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ with ($page.Resources.GetMatch "cite.bib") }}
+  {{ $links = $links | append (dict
+    "type" "bibtex"
+    "url" .RelPermalink
+    "icon" (index (index $types "bibtex") "icon")
+    "labelKey" (index (index $types "bibtex") "label_i18n")
+    "contexts" (slice "list" "page")
+  ) }}
+{{ end }}
+
+{{ with $page.Params.hugoblox }}
+  {{ with .ids }}
+    {{ range $key, $val := . }}
+      {{ with (index $derived $key) }}
+        {{ $type := index . "type" }}
+        {{ $url := replace (index . "url_template") "{id}" (printf "%v" $val) }}
+        {{ $links = $links | append (dict
+          "type" $type
+          "url" $url
+          "icon" (index . "icon")
+          "labelKey" (index . "label_i18n")
+          "contexts" (slice "list" "page")
+        ) }}
+      {{ end }}
+    {{ end }}
+  {{ end }}
+{{ end }}
+
+{{ return $links }}
